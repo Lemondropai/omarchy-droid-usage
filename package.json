@@ -1,0 +1,13 @@
+{
+  "name": "omarchy-droid-usage",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/droid-usage.test.mjs",
+    "check": "node --check droid-usage.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

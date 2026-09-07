@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.lemondropai.droid-usage",
+  "name": "Droid Usage",
+  "version": "1.0.0",
+  "author": "Lemondrop AI",
+  "license": "MIT",
+  "description": "Live Factory Droid Standard, Droid Core, and Managed Computers usage.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Droid Usage",
+    "description": "Live Factory account usage with Standard and Droid Core pools.",
+    "category": "AI",
+    "aliases": [
+      "droid",
+      "factory-usage"
+    ],
+    "allowMultiple": false,
+    "defaults": {
+      "providers": {
+        "droid": {
+          "enabled": true
+        }
+      },
+      "refreshIntervalSec": 20,
+      "droidUsagePool": "Standard"
+    },
+    "schema": [
+      {
+        "key": "droidUsagePool",
+        "type": "enum",
+        "label": "Droid usage pool",
+        "options": [
+          "Standard",
+          "Droid Core"
+        ],
+        "defaultValue": "Standard",
+        "description": "Default display pool. This does not change your Factory account."
+      }
+    ]
+  }
+}

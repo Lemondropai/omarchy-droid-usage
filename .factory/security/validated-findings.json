@@ -1,0 +1,33 @@
+{
+  "validation_id": "val-2026-09-07-initial",
+  "validation_date": "2026-09-07T00:00:00.000Z",
+  "scan_mode": "full",
+  "threat_model_path": ".factory/threat-model.md",
+  "validated_findings": [],
+  "false_positives": [],
+  "dependency_findings": [],
+  "summary": {
+    "total_scanned": 16,
+    "confirmed": 0,
+    "false_positives": 0,
+    "by_severity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "by_stride": {
+      "Spoofing": 0,
+      "Tampering": 0,
+      "Repudiation": 0,
+      "InfoDisclosure": 0,
+      "DoS": 0,
+      "ElevationOfPrivilege": 0
+    }
+  },
+  "notes": [
+    "No hardcoded credentials, personal paths, or generated usage snapshots were found.",
+    "The collector intentionally decrypts the existing Droid login locally, retains only the access token in memory, sends it only to api.factory.ai over HTTPS, and never writes it to disk or stdout.",
+    "npm audit reported zero vulnerabilities and the package has no external npm dependencies."
+  ]
+}
