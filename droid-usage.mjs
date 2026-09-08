@@ -15,6 +15,9 @@ const AUTH_KEYFILE_KEY = `${FACTORY_DIR}/auth.v2.key`;
 const AGENT_ID = "droid";
 const AGENT_NAME = "Droid";
 const TOKEN_EXPIRY_SKEW_SECONDS = 60;
+const MAX_RESPONSE_BYTES = 256 * 1024;
+const MAX_COLLECTION_ENTRIES = 64;
+const MAX_COLLECTION_DEPTH = 8;
 
 function finiteNumber(value) {
   const number = Number(value);
@@ -245,6 +248,98 @@ function tokenExpired(token, nowMs = Date.now()) {
   }
 }
 
+function isBoundedRecord(value, maximumEntries = MAX_COLLECTION_ENTRIES) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  let entries = 0;
+  for (const key in value) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+    entries += 1;
+    if (entries > maximumEntries) return false;
+  }
+  return true;
+}
+
+function collectionsWithinLimit(value, maximumEntries = MAX_COLLECTION_ENTRIES, depth = 0) {
+  if (!value || typeof value !== "object") return true;
+  if (depth > MAX_COLLECTION_DEPTH) return false;
+  if (Array.isArray(value)) {
+    if (value.length > maximumEntries) return false;
+    return value.every((entry) => collectionsWithinLimit(entry, maximumEntries, depth + 1));
+  }
+
+  let entries = 0;
+  for (const key in value) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+    entries += 1;
+    if (entries > maximumEntries
+      || !collectionsWithinLimit(value[key], maximumEntries, depth + 1)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function readJsonResponse(response, maximumBytes = MAX_RESPONSE_BYTES) {
+  const contentLength = response.headers?.get("content-length");
+  if (contentLength !== null && contentLength !== undefined && contentLength.trim() !== "") {
+    const declaredLength = Number(contentLength);
+    if (!Number.isSafeInteger(declaredLength) || declaredLength < 0 || declaredLength > maximumBytes) {
+      throw new Error("Factory usage response was too large");
+    }
+  }
+
+  if (!response.body || typeof response.body.getReader !== "function") {
+    throw new Error("Factory usage response had no readable body");
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || typeof value.byteLength !== "number") {
+        throw new Error("Factory usage response had an invalid body");
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maximumBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The response is already being rejected; cancellation is best effort.
+        }
+        throw new Error("Factory usage response was too large");
+      }
+      if (value.byteLength > 0) chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return JSON.parse(Buffer.concat(chunks, totalBytes).toString("utf8"));
+}
+
+function validLimitsPayload(payload) {
+  if (!isBoundedRecord(payload)
+    || !isBoundedRecord(payload.limits)
+    || !collectionsWithinLimit(payload)) return false;
+  for (const poolName of ["standard", "core"]) {
+    const pool = payload.limits[poolName];
+    if (pool === undefined || pool === null) continue;
+    if (!isBoundedRecord(pool)) return false;
+    for (const windowName of ["fiveHour", "weekly", "monthly"]) {
+      const window = pool[windowName];
+      if (window !== undefined && window !== null && !isBoundedRecord(window)) return false;
+    }
+  }
+  return true;
+}
+
+function validComputeUsagePayload(payload) {
+  return isBoundedRecord(payload) && collectionsWithinLimit(payload);
+}
+
 async function fetchLimits(token) {
   const response = await fetch(API_URL, {
     signal: AbortSignal.timeout(5000),
@@ -258,8 +353,8 @@ async function fetchLimits(token) {
     },
   });
   if (!response.ok) throw new Error("Factory usage request failed");
-  const payload = await response.json();
-  if (!payload || typeof payload !== "object" || !payload.limits) {
+  const payload = await readJsonResponse(response);
+  if (!validLimitsPayload(payload)) {
     throw new Error("Factory usage response was invalid");
   }
   return payload;
@@ -277,8 +372,8 @@ async function fetchComputeUsage(token) {
     },
   });
   if (!response.ok) throw new Error("Factory compute usage request failed");
-  const payload = await response.json();
-  if (!payload || typeof payload !== "object") {
+  const payload = await readJsonResponse(response);
+  if (!validComputeUsagePayload(payload)) {
     throw new Error("Factory compute usage response was invalid");
   }
   return payload;
@@ -335,6 +430,15 @@ export {
   successRecord,
   tokenExpired,
   writeUsageRecord,
+  fetchLimits,
+  fetchComputeUsage,
+  isBoundedRecord,
+  collectionsWithinLimit,
+  readJsonResponse,
+  validLimitsPayload,
+  validComputeUsagePayload,
+  MAX_RESPONSE_BYTES,
+  MAX_COLLECTION_ENTRIES,
 };
 
 async function main() {

@@ -3,14 +3,49 @@ import test from "node:test";
 
 import {
   baseRecord,
+  collectionsWithinLimit,
+  fetchComputeUsage,
+  fetchLimits,
+  isBoundedRecord,
   managedComputerUsage,
+  MAX_COLLECTION_ENTRIES,
+  MAX_RESPONSE_BYTES,
   normalizePercent,
   parseFlexibleDate,
   poolLimits,
+  readJsonResponse,
   staleRecord,
   successRecord,
   tokenExpired,
+  validComputeUsagePayload,
+  validLimitsPayload,
 } from "../droid-usage.mjs";
+
+function streamResponse(chunks, headers = {}) {
+  const encodedChunks = chunks.map((chunk) => new TextEncoder().encode(chunk));
+  let index = 0;
+  let canceled = false;
+  let released = false;
+  const reader = {
+    async read() {
+      if (index === encodedChunks.length) return { done: true, value: undefined };
+      return { done: false, value: encodedChunks[index++] };
+    },
+    async cancel() {
+      canceled = true;
+    },
+    releaseLock() {
+      released = true;
+    },
+  };
+  return {
+    ok: true,
+    headers: new Headers(headers),
+    body: { getReader: () => reader },
+    wasCanceled: () => canceled,
+    wasReleased: () => released,
+  };
+}
 
 test("normalizes API percentages to panel ratios", () => {
   assert.equal(normalizePercent(23), 0.23);
@@ -112,4 +147,65 @@ test("treats malformed or near-expiry JWTs as expired", () => {
   assert.equal(tokenExpired("not-a-token", Date.now()), true);
   const payload = Buffer.from(JSON.stringify({ exp: 1000 })).toString("base64url");
   assert.equal(tokenExpired(`a.${payload}.c`, 1000 * 1000 - 60 * 1000), true);
+});
+
+test("reads bounded JSON responses and releases the reader", async () => {
+  const response = streamResponse(['{"limits":{"standard":{}}}']);
+
+  assert.deepEqual(await readJsonResponse(response), { limits: { standard: {} } });
+  assert.equal(response.wasCanceled(), false);
+  assert.equal(response.wasReleased(), true);
+});
+
+test("rejects an oversized Content-Length before reading", async () => {
+  let read = false;
+  const response = streamResponse(["{}"], { "content-length": String(MAX_RESPONSE_BYTES + 1) });
+  response.body.getReader = () => {
+    read = true;
+    return response.body;
+  };
+
+  await assert.rejects(readJsonResponse(response), /too large/);
+  assert.equal(read, false);
+});
+
+test("cancels and releases a reader when streamed JSON exceeds the cap", async () => {
+  const response = streamResponse([
+    " ".repeat(MAX_RESPONSE_BYTES),
+    "{}",
+  ]);
+
+  await assert.rejects(readJsonResponse(response), /too large/);
+  assert.equal(response.wasCanceled(), true);
+  assert.equal(response.wasReleased(), true);
+});
+
+test("rejects arrays and oversized collections before usage processing", () => {
+  const oversized = Object.fromEntries(
+    Array.from({ length: MAX_COLLECTION_ENTRIES + 1 }, (_, index) => [`entry${index}`, {}])
+  );
+
+  assert.equal(isBoundedRecord([]), false);
+  assert.equal(isBoundedRecord(oversized), false);
+  assert.equal(collectionsWithinLimit({ records: oversized }), false);
+  assert.equal(validLimitsPayload({ limits: [] }), false);
+  assert.equal(validLimitsPayload({ limits: { standard: oversized } }), false);
+  assert.equal(validComputeUsagePayload([]), false);
+  assert.equal(validComputeUsagePayload({ records: oversized }), false);
+  assert.equal(validComputeUsagePayload(oversized), false);
+});
+
+test("both Factory fetchers use bounded response parsing and validation", async () => {
+  const originalFetch = globalThis.fetch;
+  const responses = [
+    streamResponse(['{"limits":{"standard":{}}}']),
+    streamResponse(['{"orgUsageMs":1,"limitMs":2}']),
+  ];
+  globalThis.fetch = async () => responses.shift();
+  try {
+    assert.deepEqual((await fetchLimits("token")).limits.standard, {});
+    assert.deepEqual(await fetchComputeUsage("token"), { orgUsageMs: 1, limitMs: 2 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

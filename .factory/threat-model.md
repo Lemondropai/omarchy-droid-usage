@@ -88,8 +88,9 @@ reduced usage record. Errors use fixed messages rather than response bodies.
 
 Factory or the keyring may be unavailable. Requests have five-second timeouts,
 collector runs do not overlap, and the panel retains the last successful
-snapshot marked stale. API payload size is not explicitly capped, but the two
-authenticated endpoints are controlled by Factory.
+snapshot marked stale. Responses from the two authenticated endpoints are
+streamed with a strict byte cap and bounded collection validation before JSON
+processing.
 
 ### Elevation of Privilege
 
