@@ -170,3 +170,4 @@ because the plugin has no database, HTML renderer, or server endpoint.
 ## 9. Changelog
 
 - 1.0.0 (2026-09-07): Initial STRIDE threat model.
+- 1.1.0 (2026-09-08): Document response byte and collection caps.

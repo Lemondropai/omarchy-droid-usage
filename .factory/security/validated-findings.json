@@ -1,15 +1,29 @@
 {
-  "validation_id": "val-2026-09-07-initial",
-  "validation_date": "2026-09-07T00:00:00.000Z",
-  "scan_mode": "full",
+  "validation_id": "val-2026-09-08-f776ec0",
+  "validation_date": "2026-09-08T00:00:00.000Z",
+  "scan_id": "scan-2026-09-08-f776ec0",
+  "scan_mode": "commit-range",
+  "commit_range": "36d3541..f776ec0",
   "threat_model_path": ".factory/threat-model.md",
+  "threat_model_version": "1.0.0",
   "validated_findings": [],
-  "false_positives": [],
+  "false_positives": [
+    {
+      "id": "CANDIDATE-001",
+      "reason": "Deeply nested JSON could make JSON.parse throw a RangeError, but the fetch path catches the failure and falls back to the stale usage record. Accepted as non-exploitable in this context.",
+      "evidence": "fetchLimits and fetchComputeUsage run inside main's try/catch; collectionsWithinLimit also rejects depth greater than eight before usage processing."
+    },
+    {
+      "id": "CANDIDATE-002",
+      "reason": "A response chunk may cross the configured threshold before the reader can inspect it, but Node's fetch stream delivers bounded chunks and the cumulative reader limit immediately cancels the response.",
+      "evidence": "readJsonResponse checks each chunk's byteLength, cancels on cumulative overflow, and releases the reader lock in finally."
+    }
+  ],
   "dependency_findings": [],
   "summary": {
-    "total_scanned": 16,
+    "total_scanned": 3,
     "confirmed": 0,
-    "false_positives": 0,
+    "false_positives": 2,
     "by_severity": {
       "critical": 0,
       "high": 0,
@@ -26,8 +40,10 @@
     }
   },
   "notes": [
-    "No hardcoded credentials, personal paths, or generated usage snapshots were found.",
-    "The collector intentionally decrypts the existing Droid login locally, retains only the access token in memory, sends it only to api.factory.ai over HTTPS, and never writes it to disk or stdout.",
-    "npm audit reported zero vulnerabilities and the package has no external npm dependencies."
+    "Scanned droid-usage.mjs, test/droid-usage.test.mjs, and .factory/threat-model.md.",
+    "The reported response-body denial-of-service issue is fixed with a 256 KiB stream cap, Content-Length rejection, reader cancellation, reader-lock release, and bounded collection validation.",
+    "The collector sends the access token only to fixed api.factory.ai HTTPS endpoints and does not log or persist credentials.",
+    "npm audit reported zero vulnerabilities and the package has no external npm dependencies.",
+    "Validation passed: 12 unit tests, node --check, qmllint, and omarchy plugin validate."
   ]
 }
