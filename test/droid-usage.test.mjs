@@ -48,8 +48,10 @@ function streamResponse(chunks, headers = {}) {
 }
 
 test("normalizes API percentages to panel ratios", () => {
+  assert.equal(normalizePercent(0), 0);
+  assert.equal(normalizePercent(1), 0.01);
   assert.equal(normalizePercent(23), 0.23);
-  assert.equal(normalizePercent(0.23), 0.23);
+  assert.equal(normalizePercent(100), 1);
   assert.equal(normalizePercent(150), 1);
   assert.equal(normalizePercent(-1), -1);
 });

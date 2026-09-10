@@ -65,8 +65,7 @@ function windowPercent(window, nowMs) {
 function normalizePercent(value) {
   const percent = finiteNumber(value);
   if (percent === null || percent < 0) return -1;
-  const ratio = percent > 1 ? percent / 100 : percent;
-  return clamp(ratio, 0, 1);
+  return clamp(percent / 100, 0, 1);
 }
 
 function poolLimits(pool, nowMs = Date.now()) {
